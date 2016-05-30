@@ -12,8 +12,8 @@
 
 basedir=$HOME/.dotfiles
 bindir=$HOME/bin
-gitbase=git://github.com/statico/dotfiles.git
-tarball=http://github.com/statico/dotfiles/tarball/master
+gitbase=git://github.com/abshinn/dotfiles.git
+tarball=http://github.com/abshinn/dotfiles/abshinn/master
 
 function has() {
     return $( which $1 >/dev/null )
