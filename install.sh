@@ -1,8 +1,8 @@
 #!/bin/bash -e
 #
-# Ian's dotfile installer. Usage:
+# Adam's dotfile installer. Modeled after Ian's (staico) dotfiles. Usage:
 #
-#   curl https://github.com/statico/dotfiles/raw/master/install.sh | sh
+#   curl https://github.com/abshinn/dotfiles/raw/master/install.sh | sh
 #
 # or:
 #
@@ -11,7 +11,6 @@
 # (It doesn't descend into directories.)
 
 basedir=$HOME/.dotfiles
-bindir=$HOME/bin
 gitbase=git://github.com/abshinn/dotfiles.git
 tarball=http://github.com/abshinn/dotfiles/abshinn/master
 
@@ -107,13 +106,6 @@ for path in .* ; do
     esac
 done
 
-note "Installing bin/ directory..."
-mkdir -v -p $bindir
-for path in bin/* ; do
-    relpath=$( basename $path )
-    link $basedir/$path $bindir/$relpath
-done
-
 note "Symlinking Vim configurations..."
 for rc in vim gvim; do
     link $basedir/.vim/${rc}rc $HOME/.${rc}rc
@@ -122,11 +114,6 @@ for rc in vim gvim; do
     fi
 done
 
-note "Initializing tools..."
-if has git; then
-    # Post-install scripts might customize this further.
-    cp -v $basedir/.gitconfig.base $HOME/.gitconfig
-fi
 if has vim; then
   cd $basedir
   ./.vim/update.sh all
