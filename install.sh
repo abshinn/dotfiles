@@ -1,129 +1,122 @@
 #!/bin/bash -e
 #
-# Adam's dotfile installer. Modeled after Ian's (staico) dotfiles. Usage:
-#
-#   curl https://github.com/abshinn/dotfiles/raw/master/install.sh | sh
-#
-# or:
+# Adam's dotfile installer. Modeled after Ian's (statico) dotfiles. Usage:
 #
 #   ~/.dotfiles/install.sh
 #
 # (It doesn't descend into directories.)
 
-basedir=$HOME/.dotfiles
-gitbase=git://github.com/abshinn/dotfiles.git
-tarball=http://github.com/abshinn/dotfiles/abshinn/master
+#!/usr/bin/env bash
+{ # This ensures the entire script is downloaded.
 
-function has() {
-    return $( which $1 >/dev/null )
-}
+set -eo pipefail
 
-function note() {
-    echo "[32;1m * [0m$*"
-}
+basedir="$HOME/.dotfiles"
+bindir="$HOME/bin"
+repourl="git://github.com/abshinn/dotfiles.git"
 
-function warn() {
-    echo "[31;1m * [0m$*"
-}
+function symlink() {
+  src="$1"
+  dest="$2"
 
-function die() {
-    warn $*
-    exit 1
-}
-
-function link() {
-    src=$1
-    dest=$2
-
-    if [ -e $dest ]; then
-        if [ -L $dest ]; then
-            # Already symlinked -- I'll assume correctly.
-            return
-        else
-            # Rename files with a ".old" extension.
-            warn "$dest file already exists, renaming to $dest.old"
-            backup=$dest.old
-            if [ -e $backup ]; then
-                die "$backup already exists. Aborting."
-            fi
-            mv -v $dest $backup
-        fi
-    fi
-
-    # Update existing or create new symlinks.
-    ln -vsf $src $dest
-}
-
-function unpack_tarball() {
-    note "Downloading tarball..."
-    mkdir -vp $basedir
-    cd $basedir
-    tempfile=TEMP.tar.gz
-    if has curl; then
-        curl -L $tarball >$tempfile
-    elif has wget; then
-        wget -O $tempfile $tarball
-    else:
-        die "Can't download tarball."
-    fi
-    tar --strip-components 1 -zxvf $tempfile
-    rm -v $tempfile
-}
-
-if [ -e $basedir ]; then
-    # Basedir exists. Update it.
-    cd $basedir
-    if [ -e .git ]; then
-        note "Updating dotfiles from git..."
-        git pull --rebase origin master
+  if [ -e "$dest" ]; then
+    if [ -L "$dest" ]; then
+      # Already symlinked -- I'll assume correctly.
+      return
     else
-        unpack_tarball
+      # Rename files with a ".old" extension.
+      echo "$dest already exists, renaming to $dest.old"
+      backup="$dest.old"
+      if [ -e "$backup" ]; then
+        echo "Error: "$backup" already exists. Please delete or rename it."
+        exit 1
+      fi
+      mv -v "$dest" "$backup"
     fi
+  fi
+  ln -sf "$src" "$dest"
+}
+
+if ! which git >/dev/null ; then
+  echo "Error: git is not installed"
+  exit 1
+fi
+
+if [ -d "$basedir/.git" ]; then
+  echo "Updating dotfiles using existing git..."
+  cd "$basedir"
+  git pull --quiet --rebase origin master || exit 1
 else
-    # .dotfiles directory needs to be installed. Try downloading first with
-    # git, then use tarballs.
-    if has git; then
-        note "Cloning from git..."
-        git clone $gitbase $basedir
-        cd $basedir
-        git submodule init
-        git submodule update
-    else
-        warn "Git not installed."
-        unpack_tarball
-    fi
+  echo "Checking out dotfiles using git..."
+  rm -rf "$basedir"
+  git clone --quiet --depth=1 "$repourl" "$basedir"
 fi
 
-note "Installing dotfiles..."
+cd "$basedir"
+
+echo "Creating symlinks..."
 for path in .* ; do
-    case $path in
-        .|..|.git)
-            continue
-            ;;
-        *)
-            link $basedir/$path $HOME/$path
-            ;;
-    esac
+  case "$path" in
+    .|..|.git)
+      continue
+      ;;
+    *)
+      symlink "$basedir/$path" "$HOME/$path"
+      ;;
+  esac
+done
+symlink "$basedir/.vim/vimrc" "$HOME/.vimrc"
+symlink "$basedir/.vim/gvimrc" "$HOME/.gvimrc"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  vscodepath="$HOME/Library/Application Support/Code/User"
+else
+  vscodepath="$HOME/.config/Code/User"
+fi
+mkdir -p "$vscodepath"
+symlink "$basedir/.vscode.settings.json" "$vscodepath/settings.json"
+symlink "$basedir/.vscode.keybindings.json" "$vscodepath/keybindings.json"
+
+echo "Adding executables to ~/bin/..."
+mkdir -p "$bindir"
+for path in bin/* ; do
+  symlink "$basedir/$path" "$bindir/$(basename $path)"
 done
 
-note "Symlinking Vim configurations..."
-for rc in vim gvim; do
-    link $basedir/.vim/${rc}rc $HOME/.${rc}rc
-    if [ ! -e $HOME/.${rc}local ]; then
-        touch $HOME/.${rc}local
-    fi
-done
+echo "Setting up vim plugins..."
+.vim/update.sh
 
-if has vim; then
-  cd $basedir
-  ./.vim/update.sh all
+echo "Setting up git..."
+cp "$basedir/.gitconfig.base" "$HOME/.gitconfig"
+if which git-lfs >/dev/null 2>&1 ; then
+  git lfs install
 fi
 
-note "Running post-install script, if any..."
-postinstall=$HOME/.postinstall
-if [ -e $postinstall ]; then
-    # A post-install script can the use functions defined above.
-    . $postinstall
+if which tmux >/dev/null 2>&1 ; then
+  echo "Setting up tmux..."
+  tpm="$HOME/.tmux/plugins/tpm"
+  if [ -e "$tpm" ]; then
+    pushd "$tpm" >/dev/null
+    git pull -q origin master
+    popd >/dev/null
+  else
+    git clone -q https://github.com/tmux-plugins/tpm "$HOME/.tmux/plugins/tpm"
+  fi
+  $tpm/scripts/install_plugins.sh >/dev/null
+  $tpm/scripts/clean_plugins.sh >/dev/null
+  $tpm/scripts/update_plugin.sh >/dev/null
+else
+  echo "Skipping tmux setup because tmux isn't installed."
 fi
 
-note "Done."
+postinstall="$HOME/.postinstall"
+if [ -e "$postinstall" ]; then
+  echo "Running post-install..."
+  . "$postinstall"
+else
+  echo "No post install script found. Optionally create one at $postinstall"
+fi
+
+echo "Done."
+
+} # This ensures the entire script is downloaded.

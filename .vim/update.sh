@@ -1,165 +1,75 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
 #
-# Updates Vim plugins.
+# Usage: ./update.sh [pattern]
 #
-# Update everything (long):
-#
-#   ./update.sh
-#
-# Update just the things from Git:
-#
-#   ./update.sh repos
-#
-# Update just one plugin from the list of Git repos:
-#
-#   ./update.sh repos powerline
-#
+# Specify [pattern] to update only repos that match the pattern.
 
-cd ~/.dotfiles
-
-vimdir=$PWD/.vim
-bundledir=$vimdir/bundle
-tmp=/tmp/$LOGNAME-vim-update
-me=.vim/update.sh
-
-# I have an old server with outdated CA certs.
-if [ -n "$INSECURE" ]; then
-  curl='curl --insecure'
-  export GIT_SSL_NO_VERIFY=true
-else
-  curl='curl'
-fi
-
-# URLS --------------------------------------------------------------------
-
-# This is a list of all plugins which are available via Git repos. git:// URLs
-# don't work.
 repos=(
 
-  https://github.com/Lokaltog/vim-powerline.git
-  https://github.com/StanAngeloff/php.vim.git
-  https://github.com/airblade/vim-gitgutter.git
-  https://github.com/alunny/pegjs-vim.git
-  https://github.com/ap/vim-css-color.git
-  https://github.com/ctrlpvim/ctrlp.vim.git
-  https://github.com/digitaltoad/vim-jade.git
-  https://github.com/docunext/closetag.vim.git
-  https://github.com/ekalinin/Dockerfile.vim.git
-  https://github.com/elzr/vim-json.git
-  https://github.com/ervandew/supertab
-  https://github.com/groenewege/vim-less.git
-  https://github.com/jnurmine/Zenburn.git
-  https://github.com/junegunn/goyo.vim.git
-  https://github.com/kchmck/vim-coffee-script.git
-  https://github.com/mtscout6/vim-cjsx.git
-  https://github.com/pangloss/vim-javascript.git
-  https://github.com/rking/ag.vim.git
-  https://github.com/scrooloose/nerdcommenter.git
-  https://github.com/scrooloose/nerdtree.git
-  https://github.com/scrooloose/syntastic.git
-  https://github.com/tomasr/molokai.git
-  https://github.com/tpope/vim-fugitive.git
-  https://github.com/tpope/vim-liquid.git
-  https://github.com/tpope/vim-markdown.git
-  https://github.com/tpope/vim-pathogen.git
-  https://github.com/tpope/vim-sleuth.git
-  https://github.com/tpope/vim-surround.git
-  https://github.com/vim-scripts/bufkill.vim.git
-  https://github.com/vim-scripts/oceandeep.git
-  https://github.com/wavded/vim-stylus.git
+  airblade/vim-gitgutter
+  alampros/vim-styled-jsx
+  ap/vim-css-color
+  docunext/closetag.vim
+  ervandew/supertab
+  haya14busa/incsearch.vim
+  itchyny/lightline.vim
+  jparise/vim-graphql
+  junegunn/fzf.vim
+  junegunn/goyo.vim
+  mileszs/ack.vim
+  qpkorr/vim-bufkill
+  scrooloose/nerdtree
+  sheerun/vim-polyglot
+  statico/vim-inform7
+  tpope/vim-commentary
+  tpope/vim-endwise
+  tpope/vim-eunuch
+  tpope/vim-fugitive
+  tpope/vim-pathogen
+  tpope/vim-repeat
+  tpope/vim-rhubarb
+  tpope/vim-sleuth
+  tpope/vim-surround
+  tpope/vim-unimpaired
+  w0rp/ale
+  wellle/targets.vim
 
-  )
+  altercation/vim-colors-solarized
+  arcticicestudio/nord-vim
+  nanotech/jellybeans.vim
+  rakr/vim-one
+  sonph/onehalf
+  tomasr/molokai
+  vim-scripts/wombat256.vim
 
-# Here's a list of everything else to download in the format
-# <destination>;<url>[;<filename>]
-other=(
-  'glsl/syntax;http://www.vim.org/scripts/download_script.php?src_id=3194;glsl.vim'
-  )
+)
 
-case "$1" in
+set -e
+dir=~/.dotfiles/.vim/bundle
 
-  # GIT -----------------------------------------------------------------
-  repos|repo)
-    mkdir -p $bundledir
-    for url in ${repos[@]}; do
-      if [ -n "$2" ]; then
-        if ! (echo "$url" | grep "$2" &>/dev/null) ; then
-          continue
-        fi
-      fi
-      dest="$bundledir/$(basename $url | sed -e 's/\.git$//')"
-      rm -rf $dest
-      echo "Cloning $url"
-      git clone --depth=1 -q $url $dest
-      rm -rf $dest/.git
-    done
-    ;;
+if [ -d "$dir" -a -z "$1" ]; then
+  temp="$(mktemp -d -t bundleXXXXX)"
+  echo "▲ Moving old bundle dir to $temp"
+  mv "$dir" "$temp"
+fi
 
-  # TARBALLS AND SINGLE FILES -------------------------------------------
-  other)
-    set -x
-    mkdir -p $bundledir
-    rm -rf $tmp
-    mkdir $tmp
-    pushd $tmp
+mkdir -p "$dir"
 
-    for pair in ${other[@]}; do
-      parts=($(echo $pair | tr ';' '\n'))
-      name=${parts[0]}
-      url=${parts[1]}
-      filename=${parts[2]}
-      dest=$bundledir/$name
-
-      rm -rf $dest
-
-      if echo $url | egrep '.zip$'; then
-        # Zip archives from VCS tend to have an annoying outer wrapper
-        # directory, so unpacking them into their own directory first makes it
-        # easy to remove the wrapper.
-        f=download.zip
-        $curl -L $url >$f
-        unzip $f -d $name
-        mkdir -p $dest
-        mv $name/*/* $dest
-        rm -rf $name $f
-
-      else
-        # Assume single files. Create the destination directory and download
-        # the file there.
-        mkdir -p $dest
-        pushd $dest
-        if [ -n "$filename" ]; then
-          $curl -L $url >$filename
-        else
-          $curl -OL $url
-        fi
-        popd
-
-      fi
-
-    done
-
-    popd
-    rm -rf $tmp
-    ;;
-
-  # HELP ----------------------------------------------------------------
-
-  all)
-    $me repos
-    $me other
-    echo
-    echo "Update OK"
-    ;;
-
-  *)
-    set +x
-    echo
-    echo "Usage: $0 <section> [<filter>]"
-    echo "...where section is one of:"
-    grep -E '\w\)$' $me | sed -e 's/)//'
-    echo
-    echo "<filter> can be used with the 'repos' section."
-    exit 1
-
-esac
+for repo in ${repos[@]}; do
+  if [ -n "$1" ]; then
+    if ! (echo "$repo" | grep -i "$1" &>/dev/null) ; then
+      continue
+    fi
+  fi
+  plugin="$(basename $repo | sed -e 's/\.git$//')"
+  [ "$plugin" = "vim-styled-jsx" ] && plugin="000-vim-styled-jsx" # https://goo.gl/tJVPja
+  dest="$dir/$plugin"
+  rm -rf "$dest"
+  (
+    git clone --depth=1 -q "https://github.com/$repo" "$dest"
+    rm -rf "$dest/.git"
+    echo "· Cloned $repo"
+    [ "$plugin" = "onehalf" ] && (mv "$dest" "$dest.TEMP" && mv "$dest.TEMP/vim" "$dest" && rm -rf "$dest.TEMP")
+  ) &
+done
+wait

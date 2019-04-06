@@ -1,9 +1,14 @@
-.DS_Store
-.ropeproject
 *.pyc
+*_flymake.*
 *~
 .#*
+.DS_Store
+.docker/daemon.json
+.docker/.buildNodeID
+.gvimlocal
+.postinstall
+.ropeproject
 .unison.*.unison.tmp-bad
-*_flymake.*
 .vim/bundle/*/doc/tags
 .vim/bundle/*/doc/tags-??
+.vimlocal
